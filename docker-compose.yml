@@ -1,0 +1,86 @@
+version: '3.9'
+services:
+  db:
+    image: postgres
+    volumes:
+      - ./tmp/db:/var/lib/postgresql/data
+    env_file:
+      - '.env'
+    networks:
+      - backend
+  api:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    command: bash -c "rm -f tmp/pids/server.pid && bundle exec rails s -p 3000 -b '0.0.0.0'"
+    volumes:
+      - ./api:/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    networks:
+      - backend  
+    env_file:
+      - '.env'
+    stdin_open: true
+    tty: true
+  delayed_job:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    command: bundle exec rails jobs:work
+    volumes:
+      - .:/rails-docker
+    depends_on:
+      - db
+  cron_job:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    command: cron -f
+    depends_on:
+      - db
+  web:
+    build:
+      context: .
+      dockerfile: ./docker/web/Dockerfile
+    volumes:
+      - './web:/web'
+      - './web/node_modules:/web/node_modules'
+    ports:
+      - '4200:4200'
+  redis:
+    image: redis
+    command: redis-server
+    ports:
+      - "6379:6379"
+    networks:
+      - backend  
+  sidekiq:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    command: bundle exec sidekiq
+    volumes:
+      - ./api:/api
+    depends_on:
+      - api
+      - db
+      - redis
+    networks:
+      - backend  
+    env_file:
+      - '.env'
+  mailcatcher:
+    image: schickling/mailcatcher
+    networks:
+      - backend 
+    ports:
+      - "1025:1025"
+      - "1080:1080"
+volumes:
+  db:
+  api:
+networks: 
+  backend:
